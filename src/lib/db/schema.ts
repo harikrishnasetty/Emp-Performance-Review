@@ -32,7 +32,10 @@ import {
  *     actually performs.
  */
 
-/* ────────────────────────────── Enumerations ───────────────────────────── */
+export const goalTypeEnum = pgEnum("goal_type", [
+  "INDIVIDUAL",
+  "COLLABORATIVE",
+]);
 
 export const systemRoleEnum = pgEnum("system_role", [
   "ADMIN",
@@ -538,6 +541,19 @@ export const reviewCycles = pgTable(
       .$type<string[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
+    /** HR-defined weight percentages for goal categories */
+    individualGoalWeight: numeric("individual_goal_weight", {
+      precision: 5,
+      scale: 2,
+    })
+      .notNull()
+      .default("70.00"),
+    collaborativeGoalWeight: numeric("collaborative_goal_weight", {
+      precision: 5,
+      scale: 2,
+    })
+      .notNull()
+      .default("30.00"),
     createdBy: uuid("created_by").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -734,6 +750,7 @@ export const goals = pgTable(
     description: text("description"),
     category: goalCategoryEnum("category").notNull().default("BUSINESS"),
     metricType: goalMetricEnum("metric_type").notNull().default("PERCENT"),
+    goalType: goalTypeEnum("goal_type").notNull().default("INDIVIDUAL"),
     status: goalStatusEnum("status").notNull().default("NOT_STARTED"),
     approvalStatus: goalApprovalEnum("approval_status").notNull().default("DRAFT"),
     approvalSubmittedAt: timestamp("approval_submitted_at", { withTimezone: true }),
