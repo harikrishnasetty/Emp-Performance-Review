@@ -160,6 +160,70 @@ export async function listGoalsAwaitingApproval(managerId: string) {
     .orderBy(asc(goals.approvalSubmittedAt), asc(goals.title));
 }
 
+/**
+ * Latest check-in note per goal, split into the employee's own comment and
+ * everyone else's (their manager) — the two "Mid-Year comments" columns on
+ * the performance review form.
+ */
+export async function getLatestGoalComments(
+  goalIds: string[],
+  employeeId: string,
+): Promise<
+  Map<
+    string,
+    {
+      employee: string | null;
+      employeeAt: Date | null;
+      manager: string | null;
+      managerAt: Date | null;
+    }
+  >
+> {
+  const map = new Map<
+    string,
+    {
+      employee: string | null;
+      employeeAt: Date | null;
+      manager: string | null;
+      managerAt: Date | null;
+    }
+  >();
+  if (goalIds.length === 0) return map;
+
+  const rows = await db
+    .select({
+      goalId: goalUpdates.goalId,
+      authorId: goalUpdates.authorId,
+      note: goalUpdates.noteEnc,
+      createdAt: goalUpdates.createdAt,
+    })
+    .from(goalUpdates)
+    .where(inArray(goalUpdates.goalId, goalIds))
+    .orderBy(desc(goalUpdates.createdAt))
+    .limit(600);
+
+  for (const row of rows) {
+    const entry = map.get(row.goalId) ?? {
+      employee: null,
+      employeeAt: null,
+      manager: null,
+      managerAt: null,
+    };
+    const note = decryptField(row.note);
+    if (note) {
+      if (row.authorId === employeeId && !entry.employee) {
+        entry.employee = note;
+        entry.employeeAt = row.createdAt;
+      } else if (row.authorId !== employeeId && !entry.manager) {
+        entry.manager = note;
+        entry.managerAt = row.createdAt;
+      }
+    }
+    map.set(row.goalId, entry);
+  }
+  return map;
+}
+
 export async function getGoalUpdates(goalId: string) {
   const rows = await db
     .select({

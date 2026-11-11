@@ -1,10 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { goalUpdates, goals, tasks, users, goalTypeEnum } from "@/lib/db/schema";
+import { goalUpdates, goals, reviewCycles, tasks, users } from "@/lib/db/schema";
 import { action, auditAction, ActionError, type ActionResult } from "@/lib/actions";
 import { can } from "@/lib/auth/rbac";
 import { encryptField } from "@/lib/crypto";
@@ -57,16 +57,27 @@ export async function createGoal(input: unknown): Promise<ActionResult<{ id: str
       const progress =
         data.metricType === "BOOLEAN" || data.metricType === "MILESTONE" ? 0 : 0;
 
-      // Get existing goals in this cycle to calculate total weight
-      const [existingGoals] = await db
-        .select({ weight: goals.weight, goalType: goals.goalType })
-        .from(goals)
-        .where(eq(goals.cycleId, data.cycleId));
-
-      const totalExistingWeight = existingGoals.reduce(
-        (sum, g) => sum + Number(g.weight ?? 0),
-        0
-      );
+      // The weights of an employee's goals for a review cycle must add up to
+      // 100% — "The weights for the goals in this section must add up to 100"
+      // on the review form. The running total is scoped to this owner + cycle
+      // and is checked again when the goals are sent for approval.
+      let totalExistingWeight = 0;
+      if (data.cycleId) {
+        const existing = await db
+          .select({ weight: goals.weight })
+          .from(goals)
+          .where(
+            and(
+              eq(goals.cycleId, data.cycleId),
+              eq(goals.ownerId, ctx.user.id),
+              isNull(goals.archivedAt),
+            ),
+          );
+        totalExistingWeight = existing.reduce(
+          (sum, g) => sum + Number(g.weight ?? 0),
+          0,
+        );
+      }
 
       // New goal weight from input
       const newGoalWeight = Number(data.weight);
@@ -76,9 +87,9 @@ export async function createGoal(input: unknown): Promise<ActionResult<{ id: str
 
       if (newTotalWeight > 100) {
         throw new ActionError(
-          `Total goal weight cannot exceed 100% per review cycle. Current total: ${totalExistingWeight}%, adding this goal would be ${newTotalWeight}%.`,
+          `The weights for the goals in this review cycle must add up to 100%. Current total: ${totalExistingWeight}%, adding this goal would be ${newTotalWeight}%.`,
           "validation",
-          { weight: `Would exceed 100% by ${newTotalWeight - 100}%` }
+          { weight: `Would exceed 100% by ${newTotalWeight - 100}%` },
         );
       }
 
@@ -99,7 +110,6 @@ export async function createGoal(input: unknown): Promise<ActionResult<{ id: str
           description: data.description?.trim() || null,
           category: data.category,
           metricType: data.metricType,
-          goalType: data.goalType,
           status: "NOT_STARTED",
           approvalStatus: owner?.managerId ? "DRAFT" : "APPROVED",
           approvalDecidedAt: owner?.managerId ? null : new Date(),
@@ -128,7 +138,7 @@ export async function createGoal(input: unknown): Promise<ActionResult<{ id: str
         metadata: {
           weight: data.weight,
           category: data.category,
-          goalType: data.goalType,
+          cycleId: data.cycleId,
           approvalStatus: owner?.managerId ? "DRAFT" : "APPROVED",
         },
       });
@@ -149,32 +159,55 @@ export async function submitGoalsForCycle(input: unknown): Promise<ActionResult<
     handler: async (data, ctx) => {
       const { cycleId } = data;
 
-      // Calculate total weight of all goals in this cycle
-      const [goalsInCycle] = await db
+      // Calculate total weight of all of this employee's goals in the cycle
+      const goalsInCycle = await db
         .select({ weight: goals.weight })
         .from(goals)
-        .where(eq(goals.cycleId, cycleId));
+        .where(
+          and(
+            eq(goals.cycleId, cycleId),
+            eq(goals.ownerId, ctx.user.id),
+            isNull(goals.archivedAt),
+          ),
+        );
 
       const totalWeight = goalsInCycle.reduce(
         (sum, g) => sum + Number(g.weight ?? 0),
-        0
+        0,
       );
 
       // Only allow submission if total weight = 100%
-      if (totalWeight !== 100) {
+      if (Math.abs(totalWeight - 100) > 0.01) {
         throw new ActionError(
-          `Cannot submit goals for review cycle. Total goal weight is ${totalWeight}%, but must be exactly 100%.`,
+          `Cannot submit goals for the review cycle — the weights must add up to 100%, but they currently total ${totalWeight}%.`,
           "validation",
-          { totalWeight }
+          { totalWeight: String(totalWeight) },
         );
       }
 
-      // Update all goals status to SUBMITTED
+      // Update all of this employee's goals in the cycle to SUBMITTED
       await db
         .update(goals)
-        .set({ approvalStatus: "SUBMITTED", submittedAt: new Date() })
-        .where(eq(goals.cycleId, cycleId));
+        .set({ approvalStatus: "SUBMITTED", approvalSubmittedAt: new Date() })
+        .where(
+          and(
+            eq(goals.cycleId, cycleId),
+            eq(goals.ownerId, ctx.user.id),
+            isNull(goals.archivedAt),
+            inArray(goals.approvalStatus, ["DRAFT", "RETURNED"]),
+          ),
+        );
 
+      await auditAction(ctx, {
+        action: "goal.submitted",
+        entityType: "review_cycle",
+        entityId: cycleId,
+        summary: `Submitted ${goalsInCycle.length} goal${goalsInCycle.length === 1 ? "" : "s"} for the review cycle (weights total 100%)`,
+        metadata: { totalWeight, goalCount: goalsInCycle.length },
+      });
+
+      revalidatePath("/goals");
+      revalidatePath("/dashboard");
       return { totalWeight, success: true };
     },
   });
@@ -264,6 +297,12 @@ export async function checkInGoal(input: unknown): Promise<ActionResult<{ progre
   });
 }
 
+async function isInReportingLine(actorId: string, subjectId: string): Promise<boolean> {
+  const { reportingSubtree } = await import("@/lib/auth/rbac");
+  const subtree = await reportingSubtree(actorId);
+  return subtree.includes(subjectId);
+}
+
 const updateGoalSchema = z.object({
   goalId: z.string().uuid(),
   title: z.string().min(3).max(240).optional(),
@@ -296,6 +335,30 @@ export async function updateGoal(input: unknown): Promise<ActionResult<null>> {
         );
       }
 
+      // Changing a weight must keep the cycle total within 100%.
+      if (data.weight !== undefined && goal.cycleId) {
+        const others = await db
+          .select({ weight: goals.weight })
+          .from(goals)
+          .where(
+            and(
+              eq(goals.ownerId, goal.ownerId),
+              eq(goals.cycleId, goal.cycleId),
+              isNull(goals.archivedAt),
+              ne(goals.id, goal.id),
+            ),
+          );
+        const othersTotal = others.reduce((sum, g) => sum + Number(g.weight ?? 0), 0);
+        const newTotal = othersTotal + data.weight;
+        if (newTotal > 100 + 0.01) {
+          throw new ActionError(
+            `The weights for the goals in this review cycle must add up to 100% — this change would take the total to ${newTotal}%.`,
+            "validation",
+            { weight: `Total would become ${newTotal}%` },
+          );
+        }
+      }
+
       await db
         .update(goals)
         .set({
@@ -326,7 +389,7 @@ export async function updateGoal(input: unknown): Promise<ActionResult<null>> {
 
 const submitGoalsSchema = z.object({
   goalIds: z.array(z.string().uuid()).max(200).optional(),
-);
+});
 
 export async function submitGoalsForApproval(
   input: unknown,
@@ -345,12 +408,46 @@ export async function submitGoalsForApproval(
       if (data.goalIds?.length) conditions.push(inArray(goals.id, data.goalIds));
 
       const rows = await db
-        .select({ id: goals.id, title: goals.title })
+        .select({
+          id: goals.id,
+          title: goals.title,
+          cycleId: goals.cycleId,
+          cycleName: reviewCycles.name,
+        })
         .from(goals)
+        .leftJoin(reviewCycles, eq(reviewCycles.id, goals.cycleId))
         .where(and(...conditions));
 
       if (rows.length === 0) {
         throw new ActionError("There are no draft goals waiting to be sent for approval.");
+      }
+
+      // Step 1 gate: for every review cycle involved, the weights of ALL of
+      // this employee's goals must add up to exactly 100% before the set can
+      // be sent for approval — the review form rule, enforced server-side.
+      const cycleIds = [
+        ...new Set(rows.map((r) => r.cycleId).filter((id): id is string => Boolean(id))),
+      ];
+      for (const cycleId of cycleIds) {
+        const cycleGoals = await db
+          .select({ weight: goals.weight })
+          .from(goals)
+          .where(
+            and(
+              eq(goals.ownerId, ctx.user.id),
+              eq(goals.cycleId, cycleId),
+              isNull(goals.archivedAt),
+            ),
+          );
+        const total = cycleGoals.reduce((sum, g) => sum + Number(g.weight ?? 0), 0);
+        if (Math.abs(total - 100) > 0.01) {
+          const cycleName = rows.find((r) => r.cycleId === cycleId)?.cycleName;
+          throw new ActionError(
+            `The weights for your goals in ${cycleName ? `“${cycleName}”` : "this review cycle"} must add up to 100% before they can be sent for approval — they currently total ${total}%.`,
+            "validation",
+            { totalWeight: String(total) },
+          );
+        }
       }
 
       const [owner] = await db

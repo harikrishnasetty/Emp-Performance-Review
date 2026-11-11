@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   ArrowUpRight,
   CalendarClock,
+  FileText,
   Flag,
   Layers,
   Send,
@@ -282,6 +283,14 @@ export default async function GoalsPage({
                 {c.name}
               </Link>
             ))}
+            {cycleFilter ? (
+              <Link
+                href={`/goals/cycle/${cycleFilter}`}
+                className="inline-flex items-center gap-1.5 rounded-full border border-brand-500/40 bg-brand-500/12 px-3 py-1.5 text-[0.75rem] font-medium text-brand-200 transition-colors hover:bg-brand-500/20"
+              >
+                <FileText className="size-3.5" /> Review cycle form
+              </Link>
+            ) : null}
           </div>
         ) : null}
       </div>

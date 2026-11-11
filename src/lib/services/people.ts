@@ -46,6 +46,23 @@ export async function getPerson(id: string): Promise<PersonRow | null> {
   return row ?? null;
 }
 
+/** The People Ops / HR contact shown in the review form's user information block. */
+export async function getHrContact(): Promise<string | null> {
+  const [row] = await db
+    .select({ displayName: users.displayName })
+    .from(users)
+    .where(
+      and(
+        eq(users.systemRole, "HR"),
+        isNull(users.deactivatedAt),
+        ne(users.status, "INACTIVE"),
+      ),
+    )
+    .orderBy(asc(users.displayName))
+    .limit(1);
+  return row?.displayName ?? null;
+}
+
 export async function getPeople(ids: string[]): Promise<Map<string, PersonRow>> {
   if (ids.length === 0) return new Map();
   const rows = await db

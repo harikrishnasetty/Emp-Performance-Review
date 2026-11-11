@@ -25,15 +25,34 @@ export function SubmitGoalsButton({
   label,
   size = "md",
   variant = "secondary",
+  blocked,
+  blockedHint,
 }: {
   goalIds?: string[];
   count: number;
   label?: string;
   size?: "sm" | "md";
   variant?: "primary" | "secondary" | "outline" | "ghost";
+  /** When set, the button is disabled — used for the "weights must total 100%" gate. */
+  blocked?: boolean;
+  blockedHint?: string;
 }) {
   const router = useRouter();
   const { pending, submit } = useFormAction(submitGoalsForApproval);
+
+  if (blocked) {
+    return (
+      <Button
+        size={size}
+        variant={variant}
+        disabled
+        title={blockedHint ?? "The weights for your cycle goals must add up to 100%."}
+      >
+        <Send className="size-4" />
+        {blockedHint ?? "Weights must total 100%"}
+      </Button>
+    );
+  }
 
   return (
     <Button

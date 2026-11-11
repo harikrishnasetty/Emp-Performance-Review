@@ -352,9 +352,20 @@ export default async function ReviewDetailPage({
           <Card>
             <CardHeader>
               <CardTitle>Goal evidence</CardTitle>
-              <LinkButton href={`/people/${review.participant.employeeId}`} variant="ghost" size="sm">
-                Profile
-              </LinkButton>
+              <div className="flex items-center gap-1">
+                {isSubject ? (
+                  <LinkButton
+                    href={`/goals/cycle/${review.cycle.id}`}
+                    variant="ghost"
+                    size="sm"
+                  >
+                    Form
+                  </LinkButton>
+                ) : null}
+                <LinkButton href={`/people/${review.participant.employeeId}`} variant="ghost" size="sm">
+                  Profile
+                </LinkButton>
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
               {goals.length === 0 ? (
