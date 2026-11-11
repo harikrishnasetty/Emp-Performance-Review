@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { and, eq, inArray, isNull, ne } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { goalUpdates, goals, reviewCycles, tasks, users } from "@/lib/db/schema";
+import { goalUpdates, goals, reviewCycles, cycleParticipants, tasks, users } from "@/lib/db/schema";
 import { action, auditAction, ActionError, type ActionResult } from "@/lib/actions";
 import { can } from "@/lib/auth/rbac";
 import { encryptField } from "@/lib/crypto";
@@ -63,6 +63,10 @@ export async function createGoal(input: unknown): Promise<ActionResult<{ id: str
       // and is checked again when the goals are sent for approval.
       let totalExistingWeight = 0;
       if (data.cycleId) {
+        // HR kickoff gate: the cycle must be in Goal setting and the creator
+        // must be enrolled before any goal can be added to it.
+        await assertGoalSettingOpen(data.cycleId, ctx.user.id);
+
         const existing = await db
           .select({ weight: goals.weight })
           .from(goals)
@@ -303,6 +307,44 @@ async function isInReportingLine(actorId: string, subjectId: string): Promise<bo
   return subtree.includes(subjectId);
 }
 
+/**
+ * Cycle goals follow the HR-started lifecycle: HR creates and enrols the
+ * cycle, opens the Goal setting phase, and only then does everyone get
+ * access to fill their goals. Enforced server-side for every create/edit
+ * of a goal that belongs to a review cycle.
+ */
+async function assertGoalSettingOpen(cycleId: string, employeeId: string) {
+  const [cycle] = await db
+    .select({ name: reviewCycles.name, status: reviewCycles.status })
+    .from(reviewCycles)
+    .where(eq(reviewCycles.id, cycleId))
+    .limit(1);
+  if (!cycle) throw new ActionError("That review cycle no longer exists.");
+  if (cycle.status !== "GOAL_SETTING") {
+    throw new ActionError(
+      `Goal setting for “${cycle.name}” is not open — your HR partner starts the cycle and opens each phase in turn.`,
+      "conflict",
+    );
+  }
+
+  const [participant] = await db
+    .select({ id: cycleParticipants.id })
+    .from(cycleParticipants)
+    .where(
+      and(
+        eq(cycleParticipants.cycleId, cycleId),
+        eq(cycleParticipants.employeeId, employeeId),
+      ),
+    )
+    .limit(1);
+  if (!participant) {
+    throw new ActionError(
+      `You are not enrolled in “${cycle.name}” yet — once HR enrols everyone, the cycle form is where you fill your goals.`,
+      "forbidden",
+    );
+  }
+}
+
 const updateGoalSchema = z.object({
   goalId: z.string().uuid(),
   title: z.string().min(3).max(240).optional(),
@@ -333,6 +375,12 @@ export async function updateGoal(input: unknown): Promise<ActionResult<null>> {
           "This goal is locked once it has been sent for approval. Ask your manager to return it if something must change.",
           "conflict",
         );
+      }
+
+      // Cycle goals may only change while the HR-started cycle is in its
+      // Goal setting phase (and the owner is enrolled in it).
+      if (goal.cycleId) {
+        await assertGoalSettingOpen(goal.cycleId, goal.ownerId);
       }
 
       // Changing a weight must keep the cycle total within 100%.

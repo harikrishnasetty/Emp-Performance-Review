@@ -61,6 +61,16 @@ export default async function CycleGoalsPage({
   const stats = summariseGoals(goals);
 
   const weightsOk = Math.abs(stats.totalWeight - 100) < 0.01;
+  // HR kickoff gate mirrors the server rule: goals are fillable only once HR
+  // has enrolled you and the cycle is in its Goal setting phase.
+  const goalSettingOpen = cycle.status === "GOAL_SETTING";
+  const enrolled = Boolean(participant);
+  const canFillGoals = goalSettingOpen && enrolled;
+  const fillBlockedReason = !goalSettingOpen
+    ? `Goal setting for this cycle is not open (current phase: ${cycle.status.replaceAll("_", " ").toLowerCase()}). The form is read-only until HR opens the goal setting phase.`
+    : !enrolled
+      ? "You are not enrolled in this cycle yet — HR enrols everyone when the review cycle starts, and goal filling opens then."
+      : null;
   const pendingApproval = goals.filter(
     (g) => g.approvalStatus === "DRAFT" || g.approvalStatus === "RETURNED",
   );
@@ -158,6 +168,11 @@ export default async function CycleGoalsPage({
             >
               The weights for the goals in this section must add up to 100.
             </p>
+            {fillBlockedReason ? (
+              <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[0.8125rem] leading-relaxed text-amber-300">
+                {fillBlockedReason}
+              </p>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface-0/50 px-4 py-3">
@@ -201,7 +216,9 @@ export default async function CycleGoalsPage({
               title="No goals for this cycle yet"
               description="Add every goal for the review cycle on this page, then split 100% across them before sending the set for approval."
               action={
-                <NewGoalDialog cycles={[{ id: cycle.id, name: cycle.name }]} />
+                canFillGoals ? (
+                  <NewGoalDialog cycles={[{ id: cycle.id, name: cycle.name }]} />
+                ) : undefined
               }
             />
           ) : (
@@ -211,6 +228,7 @@ export default async function CycleGoalsPage({
                   key={goal.id}
                   goal={goal}
                   comments={comments.get(goal.id)}
+                  canFill={canFillGoals}
                 />
               ))}
             </div>
@@ -225,7 +243,9 @@ export default async function CycleGoalsPage({
               {(approvalCounts.DRAFT ?? 0) + (approvalCounts.RETURNED ?? 0)} in draft
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <NewGoalDialog cycles={[{ id: cycle.id, name: cycle.name }]} />
+              {canFillGoals ? (
+                <NewGoalDialog cycles={[{ id: cycle.id, name: cycle.name }]} />
+              ) : null}
               {pendingApproval.length > 0 ? (
                 <SubmitGoalsButton
                   goalIds={pendingApproval.map((g) => g.id)}
@@ -329,12 +349,15 @@ function metricText(goal: GoalListItem): string {
 function GoalBlock({
   goal,
   comments,
+  canFill,
 }: {
   goal: GoalListItem;
   comments?: {
     employee: string | null;
     manager: string | null;
   };
+  /** False when the HR-started cycle isn't in Goal setting or the viewer isn't enrolled. */
+  canFill: boolean;
 }) {
   const meta = goalStatusMeta[goal.status] ?? goalStatusMeta.NOT_STARTED!;
   const locked =
@@ -360,7 +383,7 @@ function GoalBlock({
           <CycleGoalWeightEditor
             goalId={goal.id}
             initialWeight={Number(goal.weight)}
-            locked={locked}
+            locked={locked || !canFill}
           />
           <Badge tone={meta.tone as "neutral"} dot>
             {meta.label}
