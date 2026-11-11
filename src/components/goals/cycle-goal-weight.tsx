@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Lock } from "lucide-react";
 import { useFormAction } from "@/lib/client/hooks";
 import { updateGoal } from "@/app/actions/goals";
@@ -38,7 +39,12 @@ export function CycleGoalWeightEditor({
       {
         successMessage: `Weight set to ${weight}%`,
         onSuccess: () => router.refresh(),
-        onError: () => setValue(String(initialWeight)),
+        onError: (message) => {
+          // Rejected (e.g. would push the cycle total past 100%) — restore the
+          // previous weight and tell the user why, instead of failing silently.
+          setValue(String(initialWeight));
+          toast.error(message);
+        },
       },
     );
   };

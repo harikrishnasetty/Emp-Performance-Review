@@ -97,7 +97,11 @@ export default async function CycleGoalsPage({
       {/* ── Form title ─────────────────────────────────────────────── */}
       <div className="panel p-5 sm:p-6">
         <h1 className="display text-[1.45rem] font-semibold leading-tight text-ink-1">
-          {cycle.name} Performance Review Form for {displayName}
+          {/* Avoid "...Performance Review Performance Review Form" when the
+              cycle name already says "Performance Review". */}
+          {cycle.name.toLowerCase().includes("performance review")
+            ? `${cycle.name} Form for ${displayName}`
+            : `${cycle.name} Performance Review Form for ${displayName}`}
         </h1>
         <p className="mt-1.5 text-[0.8125rem] text-ink-3">
           {person?.jobTitle ?? user.jobTitle ?? ""}
