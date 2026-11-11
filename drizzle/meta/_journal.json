@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1793703726930,
+      "tag": "0000_rainy_christian_walker",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793704531646,
+      "tag": "0001_workable_roughhouse",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793776266668,
+      "tag": "0002_nappy_albert_cleary",
+      "breakpoints": true
+    }
+  ]
+}

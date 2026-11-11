@@ -1,0 +1,12 @@
+{
+  "name": "Meridian",
+  "short_name": "Meridian",
+  "description": "Performance intelligence for MetricStream",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0b0d14",
+  "theme_color": "#6f4bff",
+  "icons": [
+    { "src": "/icons/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

@@ -1,0 +1,30 @@
+# dependencies
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# env & secrets
+.env
+.env.local
+.env.*.local
+.env.production
+
+# git
+.git/
+.github/
+
+# misc
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+coverage/
+.nyc_output/
+
+# docker volumes (host-side)
+.docker-data/
+certs/
+drizzle/*.sql.bak

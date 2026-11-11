@@ -1,0 +1,121 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Meridian — production-ish stack for a single Linux VM.
+#   docker compose up -d --build
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: meridian
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: meridian
+      POSTGRES_USER: meridian
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-in-production}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meridian -d meridian"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [meridian]
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgres://meridian:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/meridian"
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 2000
+      DEFAULT_POOL_SIZE: 25
+      AUTH_TYPE: md5
+      ADMIN_USERS: meridian
+    ports:
+      - "6432:5432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [meridian]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [meridian]
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      APP_URL: ${APP_URL:-https://meridian.example.com}
+      APP_NAME: ${APP_NAME:-Meridian}
+      DATABASE_URL: "postgresql://meridian:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/meridian"
+      DATABASE_POOL_URL: "postgresql://meridian:${POSTGRES_PASSWORD:-change-me-in-production}@pgbouncer:6432/meridian"
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-20}
+      DATABASE_SSL: "false"
+      RLS_ENFORCE: "false"
+      REDIS_URL: "redis://redis:6379"
+      REDIS_REQUIRED: "false"
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID}
+      ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID}
+      ENTRA_CLIENT_SECRET: ${ENTRA_CLIENT_SECRET}
+      ALLOWED_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS:-metricstream.com}
+      ENTRA_STRICT_TENANT: "true"
+      FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY}
+      APP_SECRET: ${APP_SECRET}
+      SESSION_ABSOLUTE_HOURS: ${SESSION_ABSOLUTE_HOURS:-12}
+      SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-45}
+      COOKIE_SECURE: "true"
+      TRUST_PROXY: "true"
+      RATE_LIMIT_AUTH_PER_MIN: ${RATE_LIMIT_AUTH_PER_MIN:-20}
+      RATE_LIMIT_API_PER_MIN: ${RATE_LIMIT_API_PER_MIN:-300}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      SEED_DEMO_DATA: "false"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_PRETTY: "false"
+    networks: [meridian]
+    # Horizontal scale: bump replicas behind nginx.
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    networks: [meridian]
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  meridian:
+    driver: bridge

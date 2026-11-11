@@ -1,0 +1,428 @@
+@import "tailwindcss";
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MERIDIAN — Design system
+   A dark-first, high-contrast interface built for dense enterprise data.
+   Tokens are semantic: components never reference raw hex values.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@font-face {
+  font-family: "Meridian Sans";
+  src: url("/fonts/InterVariable.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-display: swap;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Meridian Display";
+  src: url("/fonts/SpaceGrotesk-Variable.woff2") format("woff2-variations");
+  font-weight: 300 700;
+  font-display: swap;
+  font-style: normal;
+}
+
+@theme {
+  --font-sans:
+    "Meridian Sans", "InterVariable", "Inter", -apple-system,
+    "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-display:
+    "Meridian Display", "Meridian Sans", "Inter", "Segoe UI Variable Display",
+    system-ui, sans-serif;
+  --font-mono:
+    "JetBrains Mono", "Cascadia Code", "SF Mono", ui-monospace, monospace;
+
+  --color-void: #05060a;
+  --color-surface-0: #080a10;
+  --color-surface-1: #0c0f17;
+  --color-surface-2: #11151f;
+  --color-surface-3: #171c28;
+  --color-surface-4: #1e2433;
+
+  --color-line: #ffffff14;
+  --color-line-strong: #ffffff26;
+
+  --color-ink-1: #f4f6fb;
+  --color-ink-2: #a3adc2;
+  --color-ink-3: #6c7689;
+  --color-ink-4: #474f60;
+
+  --color-brand-50: #f0edff;
+  --color-brand-100: #ded8ff;
+  --color-brand-200: #c2b7ff;
+  --color-brand-300: #a08fff;
+  --color-brand-400: #8468ff;
+  --color-brand-500: #6f4bff;
+  --color-brand-600: #5b34ee;
+  --color-brand-700: #4a27c4;
+  --color-brand-800: #3a1f99;
+  --color-brand-900: #2a1670;
+
+  --color-aqua-400: #4ae3f7;
+  --color-aqua-500: #22d3ee;
+  --color-aqua-600: #0eb8d4;
+
+  --color-mint-400: #4ade9b;
+  --color-mint-500: #22c07b;
+
+  --color-amber-400: #fbbf24;
+  --color-amber-500: #f59e0b;
+
+  --color-rose-400: #fb7185;
+  --color-rose-500: #f43f5e;
+
+  --radius-xs: 0.375rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.75rem;
+
+  --shadow-glow: 0 0 0 1px #ffffff0f, 0 18px 48px -12px #6f4bff40;
+  --shadow-panel: 0 1px 0 0 #ffffff0a inset, 0 24px 64px -32px #000000cc;
+}
+
+/* ── Light theme ───────────────────────────────────────────────────────── */
+:root.light {
+  --color-void: #f5f6fa;
+  --color-surface-0: #ffffff;
+  --color-surface-1: #fafbfd;
+  --color-surface-2: #f2f4f9;
+  --color-surface-3: #e9ecf3;
+  --color-surface-4: #dfe3ec;
+
+  --color-line: #0b12200f;
+  --color-line-strong: #0b12201f;
+
+  --color-ink-1: #0b1220;
+  --color-ink-2: #4a5468;
+  --color-ink-3: #778196;
+  --color-ink-4: #9aa3b5;
+
+  --shadow-panel: 0 1px 0 0 #ffffff inset, 0 18px 48px -28px #0b122026;
+}
+
+/* ── Base ──────────────────────────────────────────────────────────────── */
+* {
+  border-color: var(--color-line);
+}
+
+html {
+  color-scheme: dark;
+  -webkit-text-size-adjust: 100%;
+}
+:root.light html,
+html.light {
+  color-scheme: light;
+}
+
+body {
+  background-color: var(--color-void);
+  color: var(--color-ink-1);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01", "ss03";
+  font-synthesis-weight: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-brand-500) 40%, transparent);
+  color: var(--color-ink-1);
+}
+
+/* Thin, unobtrusive scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-surface-4) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-surface-4);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--color-ink-4) 70%, transparent);
+  background-clip: content-box;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand-400);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* ── Ambient background ────────────────────────────────────────────────── */
+.aurora-field {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+.aurora-field::before,
+.aurora-field::after {
+  content: "";
+  position: absolute;
+  width: 62vw;
+  height: 62vw;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.28;
+}
+.aurora-field::before {
+  top: -28vw;
+  left: -12vw;
+  background: radial-gradient(circle at 30% 30%, #6f4bff, transparent 62%);
+}
+.aurora-field::after {
+  bottom: -34vw;
+  right: -14vw;
+  background: radial-gradient(circle at 70% 70%, #22d3ee, transparent 60%);
+  opacity: 0.18;
+}
+:root.light .aurora-field::before,
+:root.light .aurora-field::after {
+  opacity: 0.1;
+}
+
+.grid-veil {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(to right, #ffffff08 1px, transparent 1px),
+    linear-gradient(to bottom, #ffffff08 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 20%, transparent 78%);
+}
+:root.light .grid-veil {
+  background-image:
+    linear-gradient(to right, #0b12200a 1px, transparent 1px),
+    linear-gradient(to bottom, #0b12200a 1px, transparent 1px);
+}
+
+/* ── Panels & surfaces ─────────────────────────────────────────────────── */
+.panel {
+  background:
+    linear-gradient(180deg, #ffffff08 0%, transparent 42%),
+    var(--color-surface-1);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-panel);
+}
+.panel-flat {
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+}
+.panel-hover {
+  transition:
+    border-color 180ms ease,
+    transform 180ms ease,
+    box-shadow 180ms ease;
+}
+.panel-hover:hover {
+  border-color: var(--color-line-strong);
+  transform: translateY(-1px);
+  box-shadow: 0 24px 48px -32px #000000e6;
+}
+
+.glass {
+  background: color-mix(in srgb, var(--color-surface-1) 72%, transparent);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
+
+.hairline {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-line-strong),
+    transparent
+  );
+}
+
+/* ── Text treatments ───────────────────────────────────────────────────── */
+.text-gradient {
+  background: linear-gradient(100deg, var(--color-ink-1) 0%, var(--color-brand-200) 52%, var(--color-aqua-400) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+:root.light .text-gradient {
+  background: linear-gradient(100deg, #0b1220 0%, #4a27c4 55%, #0eb8d4 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+.display {
+  font-family: var(--font-display);
+  letter-spacing: -0.03em;
+}
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+.eyebrow {
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--color-ink-3);
+}
+
+/* ── Motion ────────────────────────────────────────────────────────────── */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-brand-400) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.animate-rise {
+  animation: rise 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.animate-fade {
+  animation: fade 300ms ease both;
+}
+.stagger > * {
+  animation: rise 460ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 45ms; }
+.stagger > *:nth-child(3) { animation-delay: 90ms; }
+.stagger > *:nth-child(4) { animation-delay: 135ms; }
+.stagger > *:nth-child(5) { animation-delay: 180ms; }
+.stagger > *:nth-child(6) { animation-delay: 225ms; }
+.stagger > *:nth-child(7) { animation-delay: 270ms; }
+.stagger > *:nth-child(8) { animation-delay: 315ms; }
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-surface-2);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    #ffffff0d,
+    transparent
+  );
+  animation: shimmer 1.6s infinite;
+}
+
+/* ── Progress ring ─────────────────────────────────────────────────────── */
+.ring-track {
+  stroke: var(--color-surface-3);
+}
+.ring-value {
+  stroke-linecap: round;
+  transition: stroke-dashoffset 900ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Tables ────────────────────────────────────────────────────────────── */
+.data-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.875rem;
+}
+.data-table thead th {
+  text-align: left;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--color-ink-3);
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--color-line);
+  white-space: nowrap;
+  background: var(--color-surface-1);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.data-table tbody td {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--color-line);
+  vertical-align: middle;
+}
+.data-table tbody tr {
+  transition: background-color 140ms ease;
+}
+.data-table tbody tr:hover {
+  background: color-mix(in srgb, var(--color-surface-2) 70%, transparent);
+}
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ── Focus & reduced motion ────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Print (review packets) ────────────────────────────────────────────── */
+@media print {
+  .no-print,
+  nav,
+  aside,
+  header {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+    color: #000;
+  }
+  .panel,
+  .panel-flat {
+    border: 1px solid #ccc;
+    box-shadow: none;
+    break-inside: avoid;
+  }
+}

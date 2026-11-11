@@ -1,0 +1,52 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Meridian — local development infrastructure only (Postgres + Redis).
+#
+# The app itself runs on the host via `npm run dev` (Turbopack, hot reload),
+# not in a container. This file just gives it something to talk to, with
+# ports published to localhost so `.env.local` can point at them directly.
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.dev.yml down        # stop, keep data
+#   docker compose -f docker-compose.dev.yml down -v     # stop, wipe data
+#
+# See docs/setup.md for the full local setup walkthrough.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: meridian-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: meridian
+      POSTGRES_USER: meridian
+      # Matches the default DATABASE_URL in .env.example — change both together.
+      POSTGRES_PASSWORD: change-me-in-production
+    ports:
+      - "5432:5432"
+    volumes:
+      - meridian_dev_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meridian -d meridian"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - meridian_dev_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  meridian_dev_pgdata:
+  meridian_dev_redisdata:
