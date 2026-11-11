@@ -585,6 +585,7 @@ export const cycleParticipants = pgTable(
     calibratedAt: timestamp("calibrated_at", { withTimezone: true }),
     calibratedBy: uuid("calibrated_by"),
     completedAt: timestamp("completed_at", { withTimezone: true }),
+    employeeSignatureAt: timestamp("employee_signature_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -594,6 +595,7 @@ export const cycleParticipants = pgTable(
     index("cycle_participants_employee_idx").on(t.employeeId),
     index("cycle_participants_manager_idx").on(t.managerId),
     index("cycle_participants_status_idx").on(t.status),
+    index("cycle_participants_signature_idx").on(t.employeeSignatureAt),
   ],
 );
 

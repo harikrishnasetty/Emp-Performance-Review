@@ -294,7 +294,7 @@ export async function acknowledgeReview(input: unknown): Promise<ActionResult<nu
 
       await db
         .update(cycleParticipants)
-        .set({ status: "COMPLETE", completedAt: now })
+        .set({ status: "COMPLETE", completedAt: now, employeeSignatureAt: now })
         .where(eq(cycleParticipants.id, row.participant.id));
 
       await notify({

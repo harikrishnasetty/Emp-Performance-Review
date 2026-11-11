@@ -1,14 +1,8 @@
-# Meridian — Performance Intelligence
+# Meridian — Performance Intelligence Platform
 
-Meridian is an in-house, self-hosted employee performance review platform built for
-MetricStream. It delivers goal management, task assignment, progress tracking,
-performance reviews, role-based access and review cycles — with Azure Entra ID SSO
-(or admin-issued local credentials for people outside Entra ID), a tamper-evident
-audit trail and a security posture designed for 5,000+ users and 1,000 concurrent
-logins.
+Meridian is a performance intelligence platform for goal management, continuous feedback, structured review cycles and calibrated talent decisions. It delivers goal management, task assignment, progress tracking, performance reviews, role-based access and review cycles — with Azure Entra ID SSO (or admin-issued local credentials), a tamper-evident audit trail and security designed for team adoption.
 
-> Meridian is an original product. It is not derived from any third-party
-> performance review system.
+> Meridian is an original platform. It is not derived from any third-party performance review system.
 
 ## Stack
 
@@ -49,7 +43,7 @@ Open http://localhost:3000. Sign in with your Entra ID account (the first
 user whose email matches `BOOTSTRAP_ADMIN_EMAIL` is promoted to
 administrator), **or** use the email/password form with one of the six
 disposable local accounts `db:seed` just created — one for each role, plus a
-manager → IC hierarchy (`local.admin@metricstream.com` / `Meridian#2026!` and
+manager → IC hierarchy (`admin@example.com` / `Meridian#2026!` and
 friends; see `docs/setup.md#testing-local-non-sso-login`) if you don't have an
 Entra ID app registration handy.
 
@@ -136,6 +130,11 @@ See `docs/security.md`.
 | `docs/manual-test-plan.md` | Acceptance test plan — local test accounts, 21 manual suites, sign-off table |
 | `TRACKER.md` | Delivery tracker — what is done and verified, what is still open, known limitations |
 
-## Licence
+## License
 
-In-house. Not for redistribution.
+MIT. Free for personal, evaluation, and internal business use. Not for
+redistribution as a service offering without modification.
+
+---
+
+**Meridian** — Performance intelligence for teams and organizations.
