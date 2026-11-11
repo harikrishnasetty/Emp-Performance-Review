@@ -35,7 +35,6 @@ const createGoalSchema = z.object({
   weight: z.coerce.number().min(1).max(100).default(10),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).default("MEDIUM"),
   visibility: visibility.default("MANAGER"),
-  goalType: goalTypeEnum.default("INDIVIDUAL"),
   startDate: z.string().optional(),
   dueDate: z.string().optional(),
   cycleId: z.string().uuid().optional().nullable(),
@@ -141,6 +140,46 @@ export async function createGoal(input: unknown): Promise<ActionResult<{ id: str
   });
 }
 
+export async function submitGoalsForCycle(input: unknown): Promise<ActionResult<{ totalWeight: number; success: boolean }>> {
+  return action({
+    name: "goal.submit-cycle",
+    schema: z.object({ cycleId: z.string().uuid() }),
+    input,
+    limit: 10,
+    handler: async (data, ctx) => {
+      const { cycleId } = data;
+
+      // Calculate total weight of all goals in this cycle
+      const [goalsInCycle] = await db
+        .select({ weight: goals.weight })
+        .from(goals)
+        .where(eq(goals.cycleId, cycleId));
+
+      const totalWeight = goalsInCycle.reduce(
+        (sum, g) => sum + Number(g.weight ?? 0),
+        0
+      );
+
+      // Only allow submission if total weight = 100%
+      if (totalWeight !== 100) {
+        throw new ActionError(
+          `Cannot submit goals for review cycle. Total goal weight is ${totalWeight}%, but must be exactly 100%.`,
+          "validation",
+          { totalWeight }
+        );
+      }
+
+      // Update all goals status to SUBMITTED
+      await db
+        .update(goals)
+        .set({ approvalStatus: "SUBMITTED", submittedAt: new Date() })
+        .where(eq(goals.cycleId, cycleId));
+
+      return { totalWeight, success: true };
+    },
+  });
+}
+
 const checkInSchema = z.object({
   goalId: z.string().uuid(),
   currentValue: z.coerce.number(),
@@ -225,12 +264,6 @@ export async function checkInGoal(input: unknown): Promise<ActionResult<{ progre
   });
 }
 
-async function isInReportingLine(actorId: string, subjectId: string): Promise<boolean> {
-  const { reportingSubtree } = await import("@/lib/auth/rbac");
-  const subtree = await reportingSubtree(actorId);
-  return subtree.includes(subjectId);
-}
-
 const updateGoalSchema = z.object({
   goalId: z.string().uuid(),
   title: z.string().min(3).max(240).optional(),
@@ -284,24 +317,17 @@ export async function updateGoal(input: unknown): Promise<ActionResult<null>> {
         summary: "Goal details updated",
       });
 
-      revalidatePath(`/goals/${data.goalId}`);
       revalidatePath("/goals");
+      revalidatePath(`/goals/${data.goalId}`);
       return null;
     },
   });
 }
 
-/* ───────────────────────── Goal approval (steps 1–2) ───────────────────── */
-
 const submitGoalsSchema = z.object({
   goalIds: z.array(z.string().uuid()).max(200).optional(),
-});
+);
 
-/**
- * Step 1 of the process: the employee finalises their goals and sends them to
- * their manager. Every draft or returned goal is submitted in one action, so
- * the employee does not have to remember which individual goals are pending.
- */
 export async function submitGoalsForApproval(
   input: unknown,
 ): Promise<ActionResult<{ submitted: number; autoApproved: number }>> {
@@ -406,7 +432,6 @@ const approveGoalSchema = z.object({
   comment: z.string().max(1000).optional(),
 });
 
-/** Step 2: the manager signs off the goals as agreed. */
 export async function approveGoal(input: unknown): Promise<ActionResult<null>> {
   return action({
     name: "goal.approve",
@@ -475,7 +500,6 @@ const returnGoalSchema = z.object({
   reason: z.string().min(5, "Give a short reason so the owner knows what to change.").max(1000),
 });
 
-/** Step 2 alternative: the manager sends the goals back for revision. */
 export async function returnGoal(input: unknown): Promise<ActionResult<null>> {
   return action({
     name: "goal.return",
@@ -506,7 +530,6 @@ export async function returnGoal(input: unknown): Promise<ActionResult<null>> {
         .set({
           approvalStatus: "RETURNED",
           approvalDecidedAt: now,
-          approvedBy: ctx.user.id,
           approvalComment: data.reason.trim(),
           updatedAt: now,
         })
@@ -533,7 +556,6 @@ export async function returnGoal(input: unknown): Promise<ActionResult<null>> {
 
       revalidatePath("/goals");
       revalidatePath(`/goals/${goal.id}`);
-      revalidatePath("/dashboard");
       return null;
     },
   });
@@ -563,8 +585,9 @@ export async function archiveGoal(goalId: string): Promise<ActionResult<null>> {
         targetUserId: goal.ownerId,
         summary: `Archived goal “${goal.title}”`,
       });
+
       revalidatePath("/goals");
-      revalidatePath("/dashboard");
+      revalidatePath(`/goals/${goal.id}`);
       return null;
     },
   });
@@ -616,14 +639,14 @@ export async function setTaskStatus(
 ): Promise<ActionResult<null>> {
   return action({
     name: "task.status",
-    schema: z.object({ taskId: z.string().uuid(), status: taskStatusSchema() }),
+    schema: z.object({ taskId: z.string().uuid(), status: z.enum(["TODO", "IN_PROGRESS", "BLOCKED", "DONE", "CANCELLED"]) }),
     input: { taskId, status },
     limit: 240,
     handler: async (data, ctx) => {
       const [task] = await db.select().from(tasks).where(eq(tasks.id, data.taskId)).limit(1);
       if (!task) throw new ActionError("Task not found.");
       if (task.assigneeId !== ctx.user.id && task.createdBy !== ctx.user.id && ctx.user.systemRole !== "ADMIN") {
-        throw new ActionError("You can only update tasks assigned to you.", "forbidden");
+        throw new ActionError("You can only update tasks assigned to you.");
       }
       await db
         .update(tasks)
