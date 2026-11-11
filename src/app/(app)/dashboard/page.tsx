@@ -7,7 +7,6 @@ import {
   ClipboardCheck,
   Flame,
   MessageSquareHeart,
-  Plus,
   Target,
   TrendingUp,
   UsersRound,
@@ -111,7 +110,7 @@ export default async function DashboardPage() {
               <MessageSquareHeart className="size-4" /> Give feedback
             </LinkButton>
             <LinkButton href="/goals" size="md">
-              <Plus className="size-4" /> New goal
+              View all goals
             </LinkButton>
           </>
         }

@@ -17,7 +17,6 @@ import {
 } from "@/lib/services/goals";
 import { listCycles } from "@/lib/services/reviews";
 import { countDirectReports } from "@/lib/services/people";
-import { NewGoalDialog } from "@/components/goals/new-goal-dialog";
 import {
   GoalApprovalActions,
   SubmitGoalsButton,
@@ -100,7 +99,6 @@ export default async function GoalsPage({
                 <UsersRound className="size-4" /> Team goals
               </LinkButton>
             ) : null}
-            <NewGoalDialog cycles={upcomingCycles.map((c) => ({ id: c.id, name: c.name }))} />
           </>
         }
       />
@@ -306,9 +304,9 @@ export default async function GoalsPage({
           }
           action={
             allGoals.length === 0 ? (
-              <NewGoalDialog
-                cycles={upcomingCycles.map((c) => ({ id: c.id, name: c.name }))}
-              />
+              <LinkButton href="/goals/cycle" variant="outline" size="sm">
+                Set up cycle goals
+              </LinkButton>
             ) : (
               <LinkButton href="/goals" variant="outline" size="sm">
                 Clear filters
