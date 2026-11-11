@@ -58,45 +58,39 @@ export async function createGoal(input: unknown): Promise<ActionResult<{ id: str
       const progress =
         data.metricType === "BOOLEAN" || data.metricType === "MILESTONE" ? 0 : 0;
 
-      // Get the review cycle to check goal type weights
-      let individualGoalWeight = 70; // default HR-defined percentage
-      let collaborativeGoalWeight = 30; // default
-      let goalType = data.goalType;
+      // Get existing goals in this cycle to calculate total weight
+      const [existingGoals] = await db
+        .select({ weight: goals.weight, goalType: goals.goalType })
+        .from(goals)
+        .where(eq(goals.cycleId, data.cycleId));
 
-      if (data.cycleId) {
-        const [cycle] = await db
-          .select({ individualGoalWeight, collaborativeGoalWeight })
-          .from(reviewCycles)
-          .where(eq(reviewCycles.id, data.cycleId))
-          .limit(1);
-        if (cycle) {
-          individualGoalWeight = Number(cycle.individualGoalWeight);
-          collaborativeGoalWeight = Number(cycle.collaborativeGoalWeight);
-        }
+      const totalExistingWeight = existingGoals.reduce(
+        (sum, g) => sum + Number(g.weight ?? 0),
+        0
+      );
+
+      // New goal weight from input
+      const newGoalWeight = Number(data.weight);
+
+      // Check if adding this goal would exceed 100% total
+      const newTotalWeight = totalExistingWeight + newGoalWeight;
+
+      if (newTotalWeight > 100) {
+        throw new ActionError(
+          `Total goal weight cannot exceed 100% per review cycle. Current total: ${totalExistingWeight}%, adding this goal would be ${newTotalWeight}%.`,
+          "validation",
+          { weight: `Would exceed 100% by ${newTotalWeight - 100}%` }
+        );
       }
 
-      // Count existing goals of each type in this cycle to calculate per-goal weight
-      const [individualGoalsResult] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(goals)
-        .where(and(eq(goals.cycleId, data.cycleId), eq(goals.goalType, "INDIVIDUAL")));
-      const [collaborativeGoalsResult] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(goals)
-        .where(and(eq(goals.cycleId, data.cycleId), eq(goals.goalType, "COLLABORATIVE")));
-
-      const individualGoalsCount = individualGoalsResult?.count ?? 0;
-      const collaborativeGoalsCount = collaborativeGoalsResult?.count ?? 0;
-
-      // Calculate the per-goal weight based on type and existing goals
-      let calculatedWeight: number;
-      if (data.goalType === "INDIVIDUAL") {
-        // Weight per individual goal = individualGoalWeight / (existing + 1)
-        calculatedWeight = (individualGoalWeight / (individualGoalsCount + 1)) * 100 / 70; // normalize
-      } else {
-        // Weight per collaborative goal = collaborativeGoalWeight / (existing + 1)
-        calculatedWeight = (collaborativeGoalWeight / (collaborativeGoalsCount + 1)) * 100 / 30; // normalize
-      }
+      // Goals start as drafts until the owner sends them to their manager.
+      // Someone without a manager has nobody to approve them, so they are
+      // approved immediately rather than stranded in the approval queue.
+      const [owner] = await db
+        .select({ managerId: users.managerId })
+        .from(users)
+        .where(eq(users.id, ctx.user.id))
+        .limit(1);
 
       const [row] = await db
         .insert(goals)
@@ -116,7 +110,7 @@ export async function createGoal(input: unknown): Promise<ActionResult<{ id: str
           targetValue: String(data.targetValue),
           currentValue: String(data.startValue),
           unit: data.unit?.trim() || null,
-          weight: String(calculatedWeight), // Use calculated weight based on distribution
+          weight: String(data.weight),
           progress,
           startDate: data.startDate || null,
           dueDate: data.dueDate || null,
@@ -133,7 +127,7 @@ export async function createGoal(input: unknown): Promise<ActionResult<{ id: str
         targetUserId: ctx.user.id,
         summary: `Created goal “${data.title}”`,
         metadata: {
-          weight: calculatedWeight,
+          weight: data.weight,
           category: data.category,
           goalType: data.goalType,
           approvalStatus: owner?.managerId ? "DRAFT" : "APPROVED",
