@@ -232,8 +232,47 @@ export async function checkInGoal(input: unknown): Promise<ActionResult<{ progre
     input,
     limit: 120,
     handler: async (data, ctx) => {
-      const [goal] = await db.select().from(goals).where(eq(goals.id, data.goalId)).limit(1);
+      const [goal] = await db
+        .select({
+          id: goals.id,
+          ownerId: goals.ownerId,
+          archivedAt: goals.archivedAt,
+          cycleId: goals.cycleId,
+          approvalStatus: goals.approvalStatus,
+          metricType: goals.metricType,
+          startValue: goals.startValue,
+          targetValue: goals.targetValue,
+          cycleName: reviewCycles.name,
+          cycleStatus: reviewCycles.status,
+        })
+        .from(goals)
+        .leftJoin(reviewCycles, eq(reviewCycles.id, goals.cycleId))
+        .where(eq(goals.id, data.goalId))
+        .limit(1);
       if (!goal || goal.archivedAt) throw new ActionError("That goal no longer exists.");
+
+      // Phase-gated check-ins: HR opens mid-year/final assessment windows one
+      // at a time. Comments are only accepted inside the right window, and
+      // only by the right person (employee in self windows, manager in manager windows).
+      if (goal.cycleStatus) {
+        const isOwner = goal.ownerId === ctx.user.id;
+        const isManager = await isInReportingLine(ctx.user.id, goal.ownerId);
+        const allowed =
+          (goal.cycleStatus === "MID_YEAR_SELF" || goal.cycleStatus === "SELF_REVIEW") &&
+            isOwner ||
+          (goal.cycleStatus === "MID_YEAR_MANAGER" || goal.cycleStatus === "MANAGER_REVIEW") &&
+            isManager;
+        if (!allowed) {
+          const who =
+            goal.cycleStatus === "MID_YEAR_SELF" || goal.cycleStatus === "SELF_REVIEW"
+              ? "you"
+              : "your manager";
+          throw new ActionError(
+            `Mid-year / annual comments for “${goal.cycleName}” are not open yet — HR will open the ${who} assessment window when the cycle reaches that phase.`,
+            "conflict",
+          );
+        }
+      }
 
       if (goal.approvalStatus !== "APPROVED") {
         throw new ActionError(
@@ -461,6 +500,7 @@ export async function submitGoalsForApproval(
           title: goals.title,
           cycleId: goals.cycleId,
           cycleName: reviewCycles.name,
+          cycleStatus: reviewCycles.status,
         })
         .from(goals)
         .leftJoin(reviewCycles, eq(reviewCycles.id, goals.cycleId))
@@ -470,12 +510,24 @@ export async function submitGoalsForApproval(
         throw new ActionError("There are no draft goals waiting to be sent for approval.");
       }
 
-      // Step 1 gate: for every review cycle involved, the weights of ALL of
-      // this employee's goals must add up to exactly 100% before the set can
-      // be sent for approval — the review form rule, enforced server-side.
+      // Goal submissions are only accepted while HR has opened the Goal setting
+      // phase of the cycle — once HR moves on, the cycle is locked from new goals.
       const cycleIds = [
         ...new Set(rows.map((r) => r.cycleId).filter((id): id is string => Boolean(id))),
       ];
+      for (const cycleId of cycleIds) {
+        const status = rows.find((r) => r.cycleId === cycleId)?.cycleStatus ?? null;
+        if (status !== "GOAL_SETTING") {
+          throw new ActionError(
+            `Goal setting for this cycle is closed (phase: ${status?.replaceAll("_", " ").toLowerCase() ?? "unknown"}) — goals can only be sent for approval while HR has the cycle open for goal setting.`,
+            "conflict",
+          );
+        }
+      }
+
+      // Step 1 gate: for every review cycle involved, the weights of ALL of
+      // this employee's goals must add up to exactly 100% before the set can
+      // be sent for approval — the review form rule, enforced server-side.
       for (const cycleId of cycleIds) {
         const cycleGoals = await db
           .select({ weight: goals.weight })
@@ -584,8 +636,33 @@ export async function approveGoal(input: unknown): Promise<ActionResult<null>> {
     input,
     limit: 60,
     handler: async (data, ctx) => {
-      const [goal] = await db.select().from(goals).where(eq(goals.id, data.goalId)).limit(1);
+      const [goal] = await db
+        .select({
+          id: goals.id,
+          ownerId: goals.ownerId,
+          archivedAt: goals.archivedAt,
+          approvalStatus: goals.approvalStatus,
+          title: goals.title,
+          cycleId: goals.cycleId,
+          cycleName: reviewCycles.name,
+          cycleStatus: reviewCycles.status,
+        })
+        .from(goals)
+        .leftJoin(reviewCycles, eq(reviewCycles.id, goals.cycleId))
+        .where(eq(goals.id, data.goalId))
+        .limit(1);
       if (!goal || goal.archivedAt) throw new ActionError("That goal no longer exists.");
+
+      // Manager approvals are only accepted in the right phase: goal approval
+      // during Goal setting, mid-year comments during Mid-year (manager),
+      // final comments during Manager review.
+      const managerWindows = ["GOAL_SETTING", "MID_YEAR_MANAGER", "MANAGER_REVIEW"];
+      if (goal.cycleStatus && !managerWindows.includes(goal.cycleStatus)) {
+        throw new ActionError(
+          `Manager review for “${goal.cycleName}” is not open — HR has not opened a manager review window for this cycle yet.`,
+          "conflict",
+        );
+      }
 
       const [owner] = await db
         .select({ managerId: users.managerId })

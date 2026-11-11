@@ -135,6 +135,8 @@ export const cycleStatusMeta: Record<string, StatusMeta> = {
   DRAFT: { label: "Draft", tone: "neutral" },
   SCHEDULED: { label: "Scheduled", tone: "info" },
   GOAL_SETTING: { label: "Goal setting", tone: "info" },
+  MID_YEAR_SELF: { label: "Mid-year (self)", tone: "info" },
+  MID_YEAR_MANAGER: { label: "Mid-year (manager)", tone: "warning" },
   SELF_REVIEW: { label: "Self review", tone: "warning" },
   MANAGER_REVIEW: { label: "Manager review", tone: "warning" },
   CALIBRATION: { label: "Calibration", tone: "warning" },

@@ -306,6 +306,8 @@ export async function updateCycleStatus(
     | "DRAFT"
     | "SCHEDULED"
     | "GOAL_SETTING"
+    | "MID_YEAR_SELF"
+    | "MID_YEAR_MANAGER"
     | "SELF_REVIEW"
     | "MANAGER_REVIEW"
     | "CALIBRATION"
@@ -321,6 +323,8 @@ export async function updateCycleStatus(
         "DRAFT",
         "SCHEDULED",
         "GOAL_SETTING",
+        "MID_YEAR_SELF",
+        "MID_YEAR_MANAGER",
         "SELF_REVIEW",
         "MANAGER_REVIEW",
         "CALIBRATION",

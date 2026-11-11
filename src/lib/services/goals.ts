@@ -2,7 +2,7 @@ import "server-only";
 import { and, asc, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "../db";
-import { goalUpdates, goals, reviewCycles, tasks, users } from "../db/schema";
+import { cycleParticipants, goalUpdates, goals, reviewCycles, tasks, users } from "../db/schema";
 import { decryptField } from "../crypto";
 import { clamp, num } from "../utils";
 
@@ -314,6 +314,81 @@ export function summariseGoals(rows: { status: string; progress: number; weight:
     weightedProgress: totalWeight ? Math.round((weightedSum / totalWeight) * 10) / 10 : 0,
     totalWeight,
   };
+}
+
+/**
+ * Per-participant goal progress for the HR dashboard — goals set, sent for
+ * approval, manager-approved, and still in draft for a review cycle.
+ */
+export async function getCycleGoalProgress(cycleId: string) {
+  const participants = await db
+    .select({
+      id: cycleParticipants.id,
+      employeeId: cycleParticipants.employeeId,
+      employeeName: users.displayName,
+      managerId: cycleParticipants.managerId,
+      managerName: users.displayName,
+      status: cycleParticipants.status,
+    })
+    .from(cycleParticipants)
+    .innerJoin(users, eq(users.id, cycleParticipants.employeeId))
+    .where(eq(cycleParticipants.cycleId, cycleId))
+    .orderBy(asc(users.displayName));
+
+  const cycleGoals = await db
+    .select({
+      id: goals.id,
+      ownerId: goals.ownerId,
+      status: goals.status,
+      approvalStatus: goals.approvalStatus,
+      weight: goals.weight,
+      progress: goals.progress,
+    })
+    .from(goals)
+    .where(and(eq(goals.cycleId, cycleId), isNull(goals.archivedAt)));
+
+  return participants.map((p) => {
+    const pGoals = cycleGoals.filter((g) => g.ownerId === p.employeeId);
+    const set = pGoals.length;
+    const submitted = pGoals.filter(
+      (g) => g.approvalStatus === "SUBMITTED",
+    ).length;
+    const approved = pGoals.filter(
+      (g) => g.approvalStatus === "APPROVED",
+    ).length;
+    const draft = pGoals.filter((g) => g.approvalStatus === "DRAFT").length;
+    const totalWeight = pGoals.reduce(
+      (sum, g) => sum + Number(g.weight ?? 0),
+      0,
+    );
+    const averageProgress = set
+      ? Math.round(
+          pGoals.reduce((s, g) => s + Number(g.progress ?? 0), 0) / set,
+        )
+      : 0;
+
+    return {
+      participantId: p.id,
+      employeeId: p.employeeId,
+      employeeName: p.employeeName,
+      managerId: p.managerId,
+      managerName: p.managerName,
+      participantStatus: p.status,
+      goalsSet: set,
+      goalsDraft: draft,
+      goalsSubmitted: submitted,
+      goalsApproved: approved,
+      goalsPending: set - approved - submitted - draft,
+      totalWeight,
+      averageProgress,
+      goalsReadyForManager:
+        submitted + draft > 0 && submitted > 0
+          ? submitted
+          : set > 0 && totalWeight === 100
+            ? set
+            : 0,
+    };
+  });
 }
 
 /** Metric-aware progress: supports descending targets (e.g. reduce defects). */
