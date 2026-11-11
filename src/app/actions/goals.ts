@@ -35,6 +35,7 @@ const createGoalSchema = z.object({
   weight: z.coerce.number().min(1).max(100).default(10),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).default("MEDIUM"),
   visibility: visibility.default("MANAGER"),
+  goalType: goalTypeEnum.default("INDIVIDUAL"),
   startDate: z.string().optional(),
   dueDate: z.string().optional(),
   cycleId: z.string().uuid().optional().nullable(),
@@ -57,14 +58,45 @@ export async function createGoal(input: unknown): Promise<ActionResult<{ id: str
       const progress =
         data.metricType === "BOOLEAN" || data.metricType === "MILESTONE" ? 0 : 0;
 
-      // Goals start as drafts until the owner sends them to their manager.
-      // Someone without a manager has nobody to approve them, so they are
-      // approved immediately rather than stranded in the approval queue.
-      const [owner] = await db
-        .select({ managerId: users.managerId })
-        .from(users)
-        .where(eq(users.id, ctx.user.id))
-        .limit(1);
+      // Get the review cycle to check goal type weights
+      let individualGoalWeight = 70; // default HR-defined percentage
+      let collaborativeGoalWeight = 30; // default
+      let goalType = data.goalType;
+
+      if (data.cycleId) {
+        const [cycle] = await db
+          .select({ individualGoalWeight, collaborativeGoalWeight })
+          .from(reviewCycles)
+          .where(eq(reviewCycles.id, data.cycleId))
+          .limit(1);
+        if (cycle) {
+          individualGoalWeight = Number(cycle.individualGoalWeight);
+          collaborativeGoalWeight = Number(cycle.collaborativeGoalWeight);
+        }
+      }
+
+      // Count existing goals of each type in this cycle to calculate per-goal weight
+      const [individualGoalsResult] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(goals)
+        .where(and(eq(goals.cycleId, data.cycleId), eq(goals.goalType, "INDIVIDUAL")));
+      const [collaborativeGoalsResult] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(goals)
+        .where(and(eq(goals.cycleId, data.cycleId), eq(goals.goalType, "COLLABORATIVE")));
+
+      const individualGoalsCount = individualGoalsResult?.count ?? 0;
+      const collaborativeGoalsCount = collaborativeGoalsResult?.count ?? 0;
+
+      // Calculate the per-goal weight based on type and existing goals
+      let calculatedWeight: number;
+      if (data.goalType === "INDIVIDUAL") {
+        // Weight per individual goal = individualGoalWeight / (existing + 1)
+        calculatedWeight = (individualGoalWeight / (individualGoalsCount + 1)) * 100 / 70; // normalize
+      } else {
+        // Weight per collaborative goal = collaborativeGoalWeight / (existing + 1)
+        calculatedWeight = (collaborativeGoalWeight / (collaborativeGoalsCount + 1)) * 100 / 30; // normalize
+      }
 
       const [row] = await db
         .insert(goals)
@@ -74,6 +106,7 @@ export async function createGoal(input: unknown): Promise<ActionResult<{ id: str
           description: data.description?.trim() || null,
           category: data.category,
           metricType: data.metricType,
+          goalType: data.goalType,
           status: "NOT_STARTED",
           approvalStatus: owner?.managerId ? "DRAFT" : "APPROVED",
           approvalDecidedAt: owner?.managerId ? null : new Date(),
@@ -83,7 +116,7 @@ export async function createGoal(input: unknown): Promise<ActionResult<{ id: str
           targetValue: String(data.targetValue),
           currentValue: String(data.startValue),
           unit: data.unit?.trim() || null,
-          weight: String(data.weight),
+          weight: String(calculatedWeight), // Use calculated weight based on distribution
           progress,
           startDate: data.startDate || null,
           dueDate: data.dueDate || null,
@@ -100,8 +133,9 @@ export async function createGoal(input: unknown): Promise<ActionResult<{ id: str
         targetUserId: ctx.user.id,
         summary: `Created goal “${data.title}”`,
         metadata: {
-          weight: data.weight,
+          weight: calculatedWeight,
           category: data.category,
+          goalType: data.goalType,
           approvalStatus: owner?.managerId ? "DRAFT" : "APPROVED",
         },
       });
