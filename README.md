@@ -138,3 +138,12 @@ redistribution as a service offering without modification.
 ---
 
 **Meridian** — Performance intelligence for teams and organizations.
+
+**Developed by:** Hari Krishna Setty
+
+**Copyright:** © 2026 Hari Krishna Setty. All rights reserved.
+
+---
+
+
+# Meridian — Performance Intelligence Platform
