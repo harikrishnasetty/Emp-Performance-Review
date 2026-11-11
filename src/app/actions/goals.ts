@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { goalUpdates, goals, tasks, users } from "@/lib/db/schema";
+import { goalUpdates, goals, tasks, users, goalTypeEnum } from "@/lib/db/schema";
 import { action, auditAction, ActionError, type ActionResult } from "@/lib/actions";
 import { can } from "@/lib/auth/rbac";
 import { encryptField } from "@/lib/crypto";
